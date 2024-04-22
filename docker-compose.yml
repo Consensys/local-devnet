@@ -1,0 +1,172 @@
+version: "3.9"
+services:
+
+  ### Create genesis
+  prysm-genesis:
+    container_name: prysm-genesis
+    image: "gcr.io/prysmaticlabs/prysm/cmd/prysmctl"
+    command:
+      - testnet
+      - generate-genesis
+      - --fork=capella
+      - --num-validators=64
+      - --genesis-time-delay=15
+      - --output-ssz=/consensus/genesis.ssz
+      - --chain-config-file=/consensus/prysm_config.yml
+      - --geth-genesis-json-in=/execution/genesis.json
+      - --geth-genesis-json-out=/execution/genesis.json
+    volumes:
+      - ./consensus:/consensus
+      - ./execution:/execution
+
+  geth-genesis:
+    container_name: geth-genesis
+    image: "lightclient/geth:3074"
+    # image: "ethereum/client-go:latest"
+    command: --datadir=/execution init /execution/genesis.json
+    volumes:
+      - ./execution:/execution
+    depends_on:
+      prysm-genesis:
+        condition: service_completed_successfully
+
+  geth:
+    container_name: geth
+    image: "lightclient/geth:3074"
+    # image: "ethereum/client-go:latest"
+    command:
+      - --datadir=/execution
+      - --http
+      - --http.api=eth,net,web3
+      - --http.addr=0.0.0.0
+      - --http.corsdomain=*
+      - --ws
+      - --ws.api=eth,net,web3
+      - --ws.addr=0.0.0.0
+      - --ws.origins=*
+      - --authrpc.vhosts=*
+      - --authrpc.addr=0.0.0.0
+      - --authrpc.jwtsecret=/jwt/jwt.hex
+      - --allow-insecure-unlock
+      - --unlock=0xfa84625a86108cf199e9d975e5b2b57098d65033
+      - --password=/execution/keystore/password.txt
+      - --nodiscover
+      - --syncmode=full
+      - --metrics
+      - --metrics.addr=0.0.0.0
+      - --metrics.port=6060
+      - --metrics.expensive
+      - --verbosity=3
+      - --log.file=/var/log/execution/geth.log
+    ports:
+      - 8551:8551
+      - 8545:8545
+      - 8546:8546
+    depends_on:
+      geth-genesis:
+        condition: service_completed_successfully
+      prysm-beacon:
+        condition: service_started
+    volumes:
+      - ./execution:/execution
+      - ./logs/execution:/var/log/execution/
+      - ./jwt.hex:/jwt/jwt.hex
+
+  prysm-beacon:
+    container_name: prysm-beacon
+    image: "gcr.io/prysmaticlabs/prysm/beacon-chain:v5.0.2"
+    command:
+      - --datadir=/consensus/beacondata
+      - --chain-config-file=/consensus/prysm_config.yml
+      - --execution-endpoint=http://geth:8551
+      - --jwt-secret=/jwt/jwt.hex
+      - --min-sync-peers=0
+      - --genesis-state=/consensus/genesis.ssz
+      - --bootstrap-node=
+      - --interop-eth1data-votes
+      - --chain-id=1337
+      - --rpc-host=0.0.0.0
+      - --enable-debug-rpc-endpoints
+      - --grpc-gateway-host=0.0.0.0
+      - --accept-terms-of-use
+      - --monitoring-host=0.0.0.0
+      - --monitoring-port=8008
+      - --verbosity=INFO
+      - --log-file=/var/log/consensus/beacon.log
+      - --suggested-fee-recipient=0xfa84625a86108cf199e9d975e5b2b57098d65033
+    depends_on:
+      prysm-genesis:
+        condition: service_completed_successfully
+    ports:
+      - 3500:3500
+      - 4000:4000
+    volumes:
+      - ./consensus:/consensus
+      - ./logs/consensus:/var/log/consensus/
+      - ./jwt.hex:/jwt/jwt.hex
+
+  prysm-validator:
+    container_name: prysm-validator
+    image: "gcr.io/prysmaticlabs/prysm/validator:v5.0.2"
+    command:
+      - --datadir=/consensus/validatordata
+      - --chain-config-file=/consensus/prysm_config.yml
+      - --beacon-rpc-provider=prysm-beacon:4000
+      - --interop-num-validators=64
+      - --interop-start-index=0
+      - --accept-terms-of-use
+      - --monitoring-host=0.0.0.0
+      - --monitoring-port=8008
+      - --verbosity=INFO
+      - --log-file=/var/log/consensus/validator.log
+    depends_on:
+      prysm-beacon:
+        condition: service_started
+    volumes:
+      - ./consensus:/consensus
+      - ./logs/consensus:/var/log/consensus/      
+
+  prometheus:
+    container_name: prometheus
+    image: "prom/prometheus:v2.51.2"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml 
+    ports:
+      - 9090:9090/tcp
+    
+  grafana:
+    container_name: grafana
+    image: "grafana/grafana:10.4.2"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_USERS_VIEWERS_CAN_EDIT=true
+    volumes:
+      - ./monitoring/grafana/provisioning/:/etc/grafana/provisioning/
+      - grafana:/var/lib/grafana
+    ports:
+      - 3000:3000/tcp
+    
+  loki:
+    container_name: loki
+    image: "grafana/loki:2.8.4"
+    volumes:
+      - ./monitoring/loki/loki.yml:/etc/loki/local-config.yaml:ro
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - 3100:3100/tcp
+
+  promtail:
+    container_name: promtail
+    image: "grafana/promtail:2.8.4"
+    volumes:
+      - ./logs:/var/log
+      - ./monitoring/promtail/promtail.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    
+volumes:
+  prometheus:
+  grafana:
