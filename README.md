@@ -14,11 +14,7 @@ Please not is starts directly from proof-of-stake, and does not go through the E
 1. We need a specific commit of geth, so build and containerize it
 
 ```bash
-git clone git@github.com:lightclient/go-ethereum.git && cd go-ethereum
-git checkout eip-3074
-make geth
-docker build .
-docker tag <img> lightclient/geth:3074      
+git clone --recursive git@github.com:Consensys/local-devnet.git 
 ```
 
 ## Accounts
