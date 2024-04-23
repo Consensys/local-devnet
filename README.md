@@ -103,3 +103,10 @@ cd ethereum-genesis-generator
 mkdir output
 docker run --rm -it -u $UID -v $PWD/output:/data -v $PWD/config-example:/config ethpandaops/ethereum-genesis-generator:latest all
 ```
+
+current_time = int(time.time())
+genesis_time = current_time + 60
+shanghai_time = genesis_time + 24
+cancun_time = genesis_time + 48
+
+teku genesis mock --output-file /tmp/genesis.ssz --network teku_config.yaml --validator-count 64 --genesis-time 1713787721
