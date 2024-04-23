@@ -21,8 +21,8 @@ services:
 
   geth-genesis:
     container_name: geth-genesis
-    image: "lightclient/geth:3074"
-    # image: "ethereum/client-go:latest"
+    build:
+      context: go-ethereum
     command: --datadir=/execution init /execution/genesis.json
     volumes:
       - ./execution:/execution
@@ -32,8 +32,8 @@ services:
 
   geth:
     container_name: geth
-    image: "lightclient/geth:3074"
-    # image: "ethereum/client-go:latest"
+    build:
+      context: go-ethereum
     command:
       - --datadir=/execution
       - --http

@@ -1,0 +1,4 @@
+[submodule "go-ethereum"]
+	path = go-ethereum
+	url = https://github.com/lightclient/go-ethereum.git
+	branch = eip-3074
